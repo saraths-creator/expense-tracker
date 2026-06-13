@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data.json');
 
@@ -7,7 +8,7 @@ function readDb() {
   try {
     return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
   } catch {
-    return { transactions: [], customCategories: [] };
+    return { users: [], transactions: [], customCategories: [] };
   }
 }
 
@@ -15,10 +16,53 @@ function writeDb(data) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
 }
 
+/* ── Migrate legacy data (no userId) to admin ── */
+function migrateLegacyData() {
+  const db = readDb();
+  let changed = false;
+  const adminUser = db.users.find(u => u.username === 'admin');
+  if (!adminUser) return;
+  db.transactions.forEach(t => { if (!t.userId) { t.userId = adminUser.id; changed = true; } });
+  db.customCategories.forEach(c => { if (!c.userId) { c.userId = adminUser.id; changed = true; } });
+  if (changed) writeDb(db);
+}
+
+/* ── Users ── */
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return salt + ':' + hash;
+}
+
+function verifyPassword(password, stored) {
+  const [salt, hash] = stored.split(':');
+  const verify = crypto.scryptSync(password, salt, 64).toString('hex');
+  return hash === verify;
+}
+
+function createUser(username, password, name) {
+  const db = readDb();
+  if (db.users.find(u => u.username === username)) return null;
+  const user = { id: 'user_' + Date.now(), username, name, passwordHash: hashPassword(password) };
+  db.users.push(user);
+  writeDb(db);
+  migrateLegacyData();
+  return user;
+}
+
+function getUserByUsername(username) {
+  return readDb().users.find(u => u.username === username) || null;
+}
+
+function getUserById(id) {
+  return readDb().users.find(u => u.id === id) || null;
+}
+
 /* ── Transactions ── */
 
-function getAllTransactions() {
-  return readDb().transactions;
+function getAllTransactions(userId) {
+  return readDb().transactions.filter(t => t.userId === userId);
 }
 
 function addTransaction(t) {
@@ -45,8 +89,8 @@ function deleteTransaction(id) {
 
 /* ── Custom Categories ── */
 
-function getCustomCategories() {
-  return readDb().customCategories;
+function getCustomCategories(userId) {
+  return readDb().customCategories.filter(c => c.userId === userId);
 }
 
 function addCustomCategory(c) {
@@ -63,6 +107,10 @@ function deleteCustomCategory(id) {
 }
 
 module.exports = {
+  createUser,
+  getUserByUsername,
+  getUserById,
+  verifyPassword,
   getAllTransactions,
   addTransaction,
   updateTransaction,
@@ -70,4 +118,5 @@ module.exports = {
   getCustomCategories,
   addCustomCategory,
   deleteCustomCategory,
+  migrateLegacyData,
 };

@@ -268,6 +268,7 @@ header { background:var(--header-bg); border-bottom:1px solid var(--border); pad
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
       Export
     </button>
+    <span class="hdr-btn" style="cursor:default;opacity:.7;font-size:12px;gap:4px" id="userDisplay">👤 loading...</span>
     <button class="hdr-btn" onclick="window.location.href='/api/logout'" title="Logout" style="font-size:15px;padding:7px 10px">🚪</button>
   </div>
 </header>
@@ -541,13 +542,16 @@ let ncSelColor   = '#6b7280';
 
 async function init() {
   try {
-    const [txRes, catRes] = await Promise.all([
+    const [txRes, catRes, userRes] = await Promise.all([
       fetch('/api/data'),
-      fetch('/api/categories')
+      fetch('/api/categories'),
+      fetch('/api/user')
     ]);
-    if (!txRes.ok || !catRes.ok) { window.location.href = '/login'; return; }
+    if (!txRes.ok || !catRes.ok || !userRes.ok) { window.location.href = '/login'; return; }
     data = await txRes.json();
     customCats = await catRes.json();
+    const user = await userRes.json();
+    document.getElementById('userDisplay').textContent = '👤 ' + user.name;
   } catch (e) { window.location.href = '/login'; return; }
   render();
 }

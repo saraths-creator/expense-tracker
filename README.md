@@ -34,7 +34,6 @@ git push -u origin main
    - **Build Command:** `npm install`
    - **Start Command:** `node server.js`
 5. Click **"Advanced"** → **"Add Environment Variable"**:
-   - `APP_PASSWORD` = `your-secret-password` (set whatever you want)
    - `SESSION_SECRET` = `your-random-secret` (any random string)
 6. Click **"Create Web Service"**
 
@@ -44,7 +43,8 @@ https://expense-tracker-xxxx.onrender.com
 ```
 
 ### 4. Start using it
-Open that URL, enter your password, and you're in. Access it from any device, anywhere.
+Open that URL. Create an account (username + password) and you're in.
+Access it from any device, anywhere. Multiple users can each have their own private data.
 
 ---
 
