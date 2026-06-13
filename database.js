@@ -64,7 +64,8 @@ async function addTransaction(t) {
 }
 
 async function updateTransaction(id, t) {
-  await db.collection('transactions').updateOne({ id }, { $set: t });
+  const { _id, ...data } = t;
+  await db.collection('transactions').updateOne({ id }, { $set: data });
 }
 
 async function deleteTransaction(id) {
