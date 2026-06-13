@@ -1,33 +1,31 @@
+﻿const { MongoClient } = require('mongodb');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data.json');
+let client, db;
 
-function readDb() {
+async function connect(uri) {
+  client = new MongoClient(uri);
+  await client.connect();
+  db = client.db('expenses');
+  await migrateFromJson();
+}
+
+async function migrateFromJson() {
+  const jsonPath = path.join(__dirname, 'data.json');
+  if (!fs.existsSync(jsonPath)) return;
   try {
-    return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
-  } catch {
-    return { users: [], transactions: [], customCategories: [] };
+    const legacy = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+    if (legacy.users?.length) await db.collection('users').insertMany(legacy.users);
+    if (legacy.transactions?.length) await db.collection('transactions').insertMany(legacy.transactions);
+    if (legacy.customCategories?.length) await db.collection('customCategories').insertMany(legacy.customCategories);
+    fs.renameSync(jsonPath, jsonPath + '.bak');
+    console.log('Migrated legacy data.json to MongoDB');
+  } catch (e) {
+    console.log('Migration skipped:', e.message);
   }
 }
-
-function writeDb(data) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
-}
-
-/* ── Migrate legacy data (no userId) to admin ── */
-function migrateLegacyData() {
-  const db = readDb();
-  let changed = false;
-  const adminUser = db.users.find(u => u.username === 'admin');
-  if (!adminUser) return;
-  db.transactions.forEach(t => { if (!t.userId) { t.userId = adminUser.id; changed = true; } });
-  db.customCategories.forEach(c => { if (!c.userId) { c.userId = adminUser.id; changed = true; } });
-  if (changed) writeDb(db);
-}
-
-/* ── Users ── */
 
 function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -37,76 +35,57 @@ function hashPassword(password) {
 
 function verifyPassword(password, stored) {
   const [salt, hash] = stored.split(':');
-  const verify = crypto.scryptSync(password, salt, 64).toString('hex');
-  return hash === verify;
+  return hash === crypto.scryptSync(password, salt, 64).toString('hex');
 }
 
-function createUser(username, password, name) {
-  const db = readDb();
-  if (db.users.find(u => u.username === username)) return null;
+async function createUser(username, password, name) {
+  const existing = await db.collection('users').findOne({ username });
+  if (existing) return null;
   const user = { id: 'user_' + Date.now(), username, name, passwordHash: hashPassword(password) };
-  db.users.push(user);
-  writeDb(db);
-  migrateLegacyData();
+  await db.collection('users').insertOne(user);
   return user;
 }
 
-function getUserByUsername(username) {
-  return readDb().users.find(u => u.username === username) || null;
+async function getUserByUsername(username) {
+  return db.collection('users').findOne({ username });
 }
 
-function getUserById(id) {
-  return readDb().users.find(u => u.id === id) || null;
+async function getUserById(id) {
+  return db.collection('users').findOne({ id });
 }
 
-/* ── Transactions ── */
-
-function getAllTransactions(userId) {
-  return readDb().transactions.filter(t => t.userId === userId);
+async function getAllTransactions(userId) {
+  return db.collection('transactions').find({ userId }).sort({ date: -1 }).toArray();
 }
 
-function addTransaction(t) {
-  const db = readDb();
-  db.transactions.push(t);
-  writeDb(db);
+async function addTransaction(t) {
+  await db.collection('transactions').insertOne(t);
   return t;
 }
 
-function updateTransaction(id, t) {
-  const db = readDb();
-  const idx = db.transactions.findIndex(x => x.id === id);
-  if (idx !== -1) {
-    db.transactions[idx] = { ...db.transactions[idx], ...t };
-    writeDb(db);
-  }
+async function updateTransaction(id, t) {
+  await db.collection('transactions').updateOne({ id }, { $set: t });
 }
 
-function deleteTransaction(id) {
-  const db = readDb();
-  db.transactions = db.transactions.filter(x => x.id !== id);
-  writeDb(db);
+async function deleteTransaction(id) {
+  await db.collection('transactions').deleteOne({ id });
 }
 
-/* ── Custom Categories ── */
-
-function getCustomCategories(userId) {
-  return readDb().customCategories.filter(c => c.userId === userId);
+async function getCustomCategories(userId) {
+  return db.collection('customCategories').find({ userId }).sort({ label: 1 }).toArray();
 }
 
-function addCustomCategory(c) {
-  const db = readDb();
-  db.customCategories.push(c);
-  writeDb(db);
+async function addCustomCategory(c) {
+  await db.collection('customCategories').insertOne(c);
   return c;
 }
 
-function deleteCustomCategory(id) {
-  const db = readDb();
-  db.customCategories = db.customCategories.filter(x => x.id !== id);
-  writeDb(db);
+async function deleteCustomCategory(id) {
+  await db.collection('customCategories').deleteOne({ id });
 }
 
 module.exports = {
+  connect,
   createUser,
   getUserByUsername,
   getUserById,
@@ -118,5 +97,4 @@ module.exports = {
   getCustomCategories,
   addCustomCategory,
   deleteCustomCategory,
-  migrateLegacyData,
 };
