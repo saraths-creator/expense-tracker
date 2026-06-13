@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Expense Tracker</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5b4ef0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: Calibri, 'Calibri Light', 'Gill Sans', 'Trebuchet MS', sans-serif; }
@@ -1043,6 +1047,7 @@ function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').
 function fmtDate(d){return new Date(d+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});}
 
 init();
+if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js'); }
 </script>
 </body>
 </html>
